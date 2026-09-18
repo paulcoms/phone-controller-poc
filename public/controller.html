@@ -1,0 +1,51 @@
+<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Phone Controller</title>
+<style>body{font-family:system-ui;background:#111;color:#eee;margin:0;padding:24px;text-align:center}button{font-size:20px;width:100%;min-height:70px;margin:10px 0;border:0;border-radius:16px;font-weight:700}#trigger{min-height:150px;background:#eee;color:#111}#pickup{background:#ff2d95;color:#fff}#inspect{background:#ffd54f;color:#111}#putdown{background:#eee;color:#111}.card{display:none;text-align:left;background:#f5f0df;color:#171717;padding:20px;border-radius:16px;margin:16px 0}.card h2{margin:0 0 4px}.label{display:none;border:2px solid #b71c1c;background:#fff;padding:18px;margin-top:14px;border-radius:8px;text-align:center}.label h3{background:#b71c1c;color:white;margin:-18px -18px 14px;padding:10px;font-size:28px}.label strong{font-size:22px}pre{text-align:left;background:#222;padding:14px;border-radius:12px;font-size:13px}#talkCard{display:none;text-align:left;background:#eaf4ff;color:#171717;padding:20px;border-radius:16px;margin:16px 0}#talk{background:#2563eb;color:white;min-height:110px;touch-action:none}#transcript{background:white;padding:14px;border-radius:10px;min-height:48px;margin-top:10px}</style>
+<h1>Phone Controller</h1><p id="status">Connecting…</p><button id="enable">Enable Motion</button><button id="trigger" disabled>TRIGGER</button>
+<div id="item" class="card"><h2 id="itemName"></h2><div id="itemSubtitle"></div><button id="pickup">PICK UP</button><button id="inspect">VIEW LABEL</button><button id="putdown" style="display:none">PUT DOWN</button><div id="label" class="label"><h3>ASPIRIN</h3><strong>300 mg TABLETS</strong><p>24 tablets</p><p>For demonstration only</p><small>POC label — not medical information</small></div></div>
+<div id="talkCard"><h2>Patient</h2><p>Use your phone as the microphone.</p><button id="talk">HOLD TO TALK</button><div id="transcript">Transcript will appear here…</div></div>
+<pre id="metrics">alpha: —\nbeta: —\ngamma: —</pre>
+<script>
+const talkCard=document.querySelector('#talkCard'),talk=document.querySelector('#talk'),transcript=document.querySelector('#transcript');
+const statusEl=document.querySelector('#status'),metrics=document.querySelector('#metrics'),trigger=document.querySelector('#trigger'),item=document.querySelector('#item'),label=document.querySelector('#label'),pickup=document.querySelector('#pickup'),putdown=document.querySelector('#putdown');
+const proto=location.protocol==='https:'?'wss':'ws';const ws=new WebSocket(`${proto}://${location.host}`);function send(x){if(ws.readyState===1)ws.send(JSON.stringify(x))}
+ws.onopen=()=>{statusEl.textContent='Connected';trigger.disabled=false};ws.onclose=()=>statusEl.textContent='Disconnected';ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='selection'){if(m.item){document.querySelector('#itemName').textContent=m.item.name;document.querySelector('#itemSubtitle').textContent=m.item.subtitle;item.style.display='block';label.style.display='none'}else item.style.display='none'}else if(m.type==='pickedUp'){pickup.style.display='none';putdown.style.display='block';trigger.disabled=true}else if(m.type==='patientSelected'){item.style.display='none';talkCard.style.display='block'}else if(m.type==='patientDeselected'){talkCard.style.display='none'}else if(m.type==='putDown'){item.style.display='none';pickup.style.display='block';putdown.style.display='none';label.style.display='none';trigger.disabled=false}};
+function motion(e){const alpha=e.alpha??0,beta=e.beta??0,gamma=e.gamma??0;metrics.textContent=`alpha: ${alpha.toFixed(1)}\nbeta: ${beta.toFixed(1)}\ngamma: ${gamma.toFixed(1)}`;send({type:'orientation',alpha,beta,gamma,t:performance.now()})}
+document.querySelector('#enable').onclick=async()=>{try{if(typeof DeviceOrientationEvent?.requestPermission==='function'){if(await DeviceOrientationEvent.requestPermission()!=='granted')throw Error('Permission denied')}window.addEventListener('deviceorientation',motion);document.querySelector('#enable').textContent='Motion enabled';document.querySelector('#enable').disabled=true}catch(e){statusEl.textContent=e.message}};
+trigger.onclick=()=>send({type:'trigger'});pickup.onclick=()=>send({type:'pickup',id:'aspirin'});putdown.onclick=()=>send({type:'putdown',id:'aspirin'});
+
+let stream=null,recorder=null,chunks=[],recording=false;
+async function startTalk(e){
+  e.preventDefault();
+  if(recording)return;
+  try{
+    if(!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw Error('Microphone recording is not supported by this browser.');
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const preferred=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+    recorder=preferred?new MediaRecorder(stream,{mimeType:preferred}):new MediaRecorder(stream);
+    chunks=[];
+    recorder.ondataavailable=ev=>{if(ev.data.size)chunks.push(ev.data)};
+    recorder.onstop=transcribeRecording;
+    recorder.start();recording=true;
+    transcript.textContent='Listening…';talk.textContent='RELEASE TO SEND';
+  }catch(err){transcript.textContent=`Microphone: ${err.message}`;cleanupMic()}
+}
+function stopTalk(e){e.preventDefault();if(recording&&recorder?.state==='recording'){recording=false;talk.textContent='TRANSCRIBING…';talk.disabled=true;recorder.stop()}}
+function cleanupMic(){recording=false;stream?.getTracks().forEach(t=>t.stop());stream=null;recorder=null;talk.disabled=false;talk.textContent='HOLD TO TALK'}
+async function transcribeRecording(){
+  const type=recorder?.mimeType||chunks[0]?.type||'audio/webm';
+  const blob=new Blob(chunks,{type});
+  stream?.getTracks().forEach(t=>t.stop());stream=null;
+  try{
+    transcript.textContent='Transcribing on server…';
+    const r=await fetch('/transcribe',{method:'POST',headers:{'Content-Type':type},body:blob});
+    const data=await r.json();
+    if(!r.ok)throw Error(data.error||'Transcription failed');
+    const text=(data.text||'').trim();
+    transcript.textContent=text||'(No speech recognised)';
+    if(text)send({type:'speech',text});
+  }catch(err){transcript.textContent=`Transcription: ${err.message}`}
+  finally{cleanupMic()}
+}
+talk.addEventListener('pointerdown',startTalk);talk.addEventListener('pointerup',stopTalk);talk.addEventListener('pointercancel',stopTalk);
+document.querySelector('#inspect').onclick=()=>{label.style.display='block';send({type:'inspect',id:'aspirin'})};
+</script>
