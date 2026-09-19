@@ -1,51 +1,46 @@
-<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Phone Controller</title>
-<style>body{font-family:system-ui;background:#111;color:#eee;margin:0;padding:24px;text-align:center}button{font-size:20px;width:100%;min-height:70px;margin:10px 0;border:0;border-radius:16px;font-weight:700}#trigger{min-height:150px;background:#eee;color:#111}#pickup{background:#ff2d95;color:#fff}#inspect{background:#ffd54f;color:#111}#putdown{background:#eee;color:#111}.card{display:none;text-align:left;background:#f5f0df;color:#171717;padding:20px;border-radius:16px;margin:16px 0}.card h2{margin:0 0 4px}.label{display:none;border:2px solid #b71c1c;background:#fff;padding:18px;margin-top:14px;border-radius:8px;text-align:center}.label h3{background:#b71c1c;color:white;margin:-18px -18px 14px;padding:10px;font-size:28px}.label strong{font-size:22px}pre{text-align:left;background:#222;padding:14px;border-radius:12px;font-size:13px}#talkCard{display:none;text-align:left;background:#eaf4ff;color:#171717;padding:20px;border-radius:16px;margin:16px 0}#talk{background:#2563eb;color:white;min-height:110px;touch-action:none}#transcript{background:white;padding:14px;border-radius:10px;min-height:48px;margin-top:10px}</style>
-<h1>Phone Controller</h1><p id="status">Connecting…</p><button id="enable">Enable Motion</button><button id="trigger" disabled>TRIGGER</button>
-<div id="item" class="card"><h2 id="itemName"></h2><div id="itemSubtitle"></div><button id="pickup">PICK UP</button><button id="inspect">VIEW LABEL</button><button id="putdown" style="display:none">PUT DOWN</button><div id="label" class="label"><h3>ASPIRIN</h3><strong>300 mg TABLETS</strong><p>24 tablets</p><p>For demonstration only</p><small>POC label — not medical information</small></div></div>
-<div id="talkCard"><h2>Patient</h2><p>Use your phone as the microphone.</p><button id="talk">HOLD TO TALK</button><div id="transcript">Transcript will appear here…</div></div>
-<pre id="metrics">alpha: —\nbeta: —\ngamma: —</pre>
-<script>
-const talkCard=document.querySelector('#talkCard'),talk=document.querySelector('#talk'),transcript=document.querySelector('#transcript');
-const statusEl=document.querySelector('#status'),metrics=document.querySelector('#metrics'),trigger=document.querySelector('#trigger'),item=document.querySelector('#item'),label=document.querySelector('#label'),pickup=document.querySelector('#pickup'),putdown=document.querySelector('#putdown');
-const proto=location.protocol==='https:'?'wss':'ws';const ws=new WebSocket(`${proto}://${location.host}`);function send(x){if(ws.readyState===1)ws.send(JSON.stringify(x))}
-ws.onopen=()=>{statusEl.textContent='Connected';trigger.disabled=false};ws.onclose=()=>statusEl.textContent='Disconnected';ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='selection'){if(m.item){document.querySelector('#itemName').textContent=m.item.name;document.querySelector('#itemSubtitle').textContent=m.item.subtitle;item.style.display='block';label.style.display='none'}else item.style.display='none'}else if(m.type==='pickedUp'){pickup.style.display='none';putdown.style.display='block';trigger.disabled=true}else if(m.type==='patientSelected'){item.style.display='none';talkCard.style.display='block'}else if(m.type==='patientDeselected'){talkCard.style.display='none'}else if(m.type==='putDown'){item.style.display='none';pickup.style.display='block';putdown.style.display='none';label.style.display='none';trigger.disabled=false}};
-function motion(e){const alpha=e.alpha??0,beta=e.beta??0,gamma=e.gamma??0;metrics.textContent=`alpha: ${alpha.toFixed(1)}\nbeta: ${beta.toFixed(1)}\ngamma: ${gamma.toFixed(1)}`;send({type:'orientation',alpha,beta,gamma,t:performance.now()})}
-document.querySelector('#enable').onclick=async()=>{try{if(typeof DeviceOrientationEvent?.requestPermission==='function'){if(await DeviceOrientationEvent.requestPermission()!=='granted')throw Error('Permission denied')}window.addEventListener('deviceorientation',motion);document.querySelector('#enable').textContent='Motion enabled';document.querySelector('#enable').disabled=true}catch(e){statusEl.textContent=e.message}};
-trigger.onclick=()=>send({type:'trigger'});pickup.onclick=()=>send({type:'pickup',id:'aspirin'});putdown.onclick=()=>send({type:'putdown',id:'aspirin'});
-
-let stream=null,recorder=null,chunks=[],recording=false;
-async function startTalk(e){
-  e.preventDefault();
-  if(recording)return;
-  try{
-    if(!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw Error('Microphone recording is not supported by this browser.');
-    stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    const preferred=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t));
-    recorder=preferred?new MediaRecorder(stream,{mimeType:preferred}):new MediaRecorder(stream);
-    chunks=[];
-    recorder.ondataavailable=ev=>{if(ev.data.size)chunks.push(ev.data)};
-    recorder.onstop=transcribeRecording;
-    recorder.start();recording=true;
-    transcript.textContent='Listening…';talk.textContent='RELEASE TO SEND';
-  }catch(err){transcript.textContent=`Microphone: ${err.message}`;cleanupMic()}
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><title>SIM Controller</title>
+<style>
+*{box-sizing:border-box;-webkit-user-select:none;user-select:none}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1117;color:#eee;font-family:system-ui}body{touch-action:none}.app{height:100%;display:grid;grid-template-columns:minmax(150px,26vw) 1fr minmax(150px,26vw);gap:12px;padding:max(10px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}.side{display:flex;align-items:center;justify-content:center;position:relative}.center{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.brand{position:absolute;top:4px;font-size:12px;letter-spacing:.16em;color:#8993a4}.status{font-size:12px;color:#7ee787;margin-top:5px}.stick{width:min(23vw,180px);height:min(23vw,180px);border-radius:50%;background:#1b2330;border:2px solid #39465a;position:relative;box-shadow:inset 0 0 30px #0008}.knob{position:absolute;left:50%;top:50%;width:42%;height:42%;transform:translate(-50%,-50%);border-radius:50%;background:#667085;border:2px solid #9aa4b2;box-shadow:0 5px 14px #0008}.stickLabel{position:absolute;bottom:6px;font-size:12px;letter-spacing:.12em;color:#8993a4}.panel{width:100%;max-width:430px;min-height:150px;border:1px solid #303a49;border-radius:18px;background:#151b24;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;align-items:center}.panel h2{margin:0 0 5px;font-size:22px}.panel p{margin:3px 0;color:#aab3c2;font-size:13px}.actions{width:100%;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;font-size:14px;min-width:110px}.primary{background:#ff2d95;color:white}.secondary{background:#e6edf3;color:#111}.talk{background:#2563eb;color:white;min-width:180px;touch-action:none}.trigger{position:absolute;right:0;bottom:8px;width:82px;height:58px;min-width:0;padding:0;background:#ff2d95;color:#fff;border-radius:18px}.label{display:none;background:#fff;color:#111;border:2px solid #b71c1c;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px}.label strong{display:block;color:#b71c1c;font-size:18px}.transcript{width:100%;background:#0d1117;border-radius:8px;padding:8px;margin-top:8px;min-height:34px;font-size:12px;color:#c9d1d9}.motion{position:absolute;left:0;bottom:8px;background:#242c38;color:#eee;min-width:0;padding:9px 12px;font-size:11px}.rotateHint{color:#f9a8d4!important;font-weight:700}.rightActions{width:100%;display:flex;flex-direction:column;align-items:stretch;gap:10px}.actionKey{position:static;width:100%;height:58px;min-width:0}.aimHint{margin-top:8px;text-align:center;color:#8993a4;font-size:11px;line-height:1.5;letter-spacing:.08em}
+@media (orientation:portrait){.app:before{content:'Rotate phone to landscape';position:fixed;inset:0;background:#0d1117;z-index:99;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800}.app>*{visibility:hidden}}
+</style></head><body><div class="app">
+<div class="side"><div><div id="move" class="stick"><div class="knob"></div></div><div class="stickLabel">MOVE</div></div></div>
+<div class="center"><div class="brand">SIM CONTROLLER <span id="status" class="status">CONNECTING…</span></div><div id="panel" class="panel"><h2 id="title">Navigation</h2><p id="subtitle">Move with left stick · look with right stick</p><div id="actions" class="actions"></div><div id="label" class="label"><strong>ASPIRIN</strong>300 mg TABLETS · 24 tablets<br>POC label — not medical information</div><div id="transcript" class="transcript" style="display:none"></div></div><button id="enable" class="motion">ENABLE MOTION</button></div>
+<div class="side"><div class="rightActions"><button id="trigger" class="primary actionKey">INTERACT</button><button id="calibrate" class="secondary actionKey">CALIBRATE</button><div class="aimHint">MOVE PHONE<br>TO LOOK / AIM</div></div></div>
+</div><script>
+const $=s=>document.querySelector(s),statusEl=$('#status'),title=$('#title'),subtitle=$('#subtitle'),actions=$('#actions'),label=$('#label'),transcript=$('#transcript'),trigger=$('#trigger'),calibrate=$('#calibrate');
+const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}`);function send(x){if(ws.readyState===1)ws.send(JSON.stringify(x))}ws.onopen=()=>statusEl.textContent='CONNECTED';ws.onclose=()=>statusEl.textContent='DISCONNECTED';
+let selection=null,held=false,lastOrientation={alpha:0,beta:0,gamma:0};
+function btn(text,cls,fn){const b=document.createElement('button');b.textContent=text;b.className=cls;b.onclick=fn;actions.appendChild(b);return b}
+function navUI(){selection=null;held=false;title.textContent='Navigation';subtitle.textContent='Move with left stick · physically move phone to look';actions.innerHTML='';label.style.display='none';transcript.style.display='none';trigger.style.display='block'}
+function aspirinUI(){selection='aspirin';title.textContent='Aspirin';subtitle.textContent='300 mg tablets';actions.innerHTML='';label.style.display='none';transcript.style.display='none';btn('PICK UP','primary',()=>send({type:'pickup',id:'aspirin'}));btn('VIEW LABEL','secondary',()=>{label.style.display='block';send({type:'inspect',id:'aspirin'})})}
+function heldUI(){held=true;title.textContent='Aspirin — held';subtitle.textContent='Rotate / tilt the phone to inspect';subtitle.className='rotateHint';actions.innerHTML='';btn('VIEW LABEL','secondary',()=>label.style.display=label.style.display==='block'?'none':'block');btn('PUT DOWN','primary',()=>send({type:'putdown',id:'aspirin'}));trigger.style.display='none'}
+function patientUI(){selection='patient';title.textContent='Patient';subtitle.className='';subtitle.textContent='Phone microphone → transcript on PC';actions.innerHTML='';label.style.display='none';transcript.style.display='block';transcript.textContent='Hold TALK and speak…';const b=btn('🎤 HOLD TO TALK','talk',()=>{});wireTalk(b)}
+ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='selection'){m.item?.id==='aspirin'?aspirinUI():(!m.item&&selection==='aspirin'?navUI():0)}else if(m.type==='patientSelected')patientUI();else if(m.type==='patientDeselected'&&selection==='patient')navUI();else if(m.type==='pickedUp')heldUI();else if(m.type==='putDown')navUI()};
+trigger.addEventListener('pointerdown',e=>{e.preventDefault();send({type:'trigger'})});
+function joystick(el,type){
+  const knob=el.querySelector('.knob');
+  let active=false,lastSend=0;
+  function updateXY(clientX,clientY){
+    const r=el.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+    let dx=clientX-cx,dy=clientY-cy,max=r.width*.31,len=Math.hypot(dx,dy)||1,s=Math.min(1,max/len);
+    dx*=s;dy*=s;
+    knob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
+    const now=performance.now();
+    if(now-lastSend>16){send({type:'gamepad',control:type,x:dx/max,y:dy/max});lastSend=now}
+  }
+  function end(){if(!active)return;active=false;knob.style.transform='translate(-50%,-50%)';send({type:'gamepad',control:type,x:0,y:0})}
+  // Touch events are deliberately explicit here: this is the primary iPhone input path.
+  el.addEventListener('touchstart',e=>{e.preventDefault();active=true;const t=e.changedTouches[0];updateXY(t.clientX,t.clientY)},{passive:false});
+  el.addEventListener('touchmove',e=>{e.preventDefault();if(!active)return;const t=e.changedTouches[0];updateXY(t.clientX,t.clientY)},{passive:false});
+  el.addEventListener('touchend',e=>{e.preventDefault();end()},{passive:false});
+  el.addEventListener('touchcancel',end,{passive:false});
+  // Mouse fallback makes it easy to test from a desktop browser too.
+  let mouse=false;
+  el.addEventListener('mousedown',e=>{e.preventDefault();mouse=active=true;updateXY(e.clientX,e.clientY)});
+  window.addEventListener('mousemove',e=>{if(mouse)updateXY(e.clientX,e.clientY)});
+  window.addEventListener('mouseup',()=>{if(mouse){mouse=false;end()}});
 }
-function stopTalk(e){e.preventDefault();if(recording&&recorder?.state==='recording'){recording=false;talk.textContent='TRANSCRIBING…';talk.disabled=true;recorder.stop()}}
-function cleanupMic(){recording=false;stream?.getTracks().forEach(t=>t.stop());stream=null;recorder=null;talk.disabled=false;talk.textContent='HOLD TO TALK'}
-async function transcribeRecording(){
-  const type=recorder?.mimeType||chunks[0]?.type||'audio/webm';
-  const blob=new Blob(chunks,{type});
-  stream?.getTracks().forEach(t=>t.stop());stream=null;
-  try{
-    transcript.textContent='Transcribing on server…';
-    const r=await fetch('/transcribe',{method:'POST',headers:{'Content-Type':type},body:blob});
-    const data=await r.json();
-    if(!r.ok)throw Error(data.error||'Transcription failed');
-    const text=(data.text||'').trim();
-    transcript.textContent=text||'(No speech recognised)';
-    if(text)send({type:'speech',text});
-  }catch(err){transcript.textContent=`Transcription: ${err.message}`}
-  finally{cleanupMic()}
-}
-talk.addEventListener('pointerdown',startTalk);talk.addEventListener('pointerup',stopTalk);talk.addEventListener('pointercancel',stopTalk);
-document.querySelector('#inspect').onclick=()=>{label.style.display='block';send({type:'inspect',id:'aspirin'})};
-</script>
+joystick($('#move'),'move');
+function motion(e){lastOrientation={alpha:e.alpha??0,beta:e.beta??0,gamma:e.gamma??0,screenAngle:screen.orientation?.angle??window.orientation??0};send({type:'orientation',...lastOrientation})}calibrate.onclick=()=>send({type:'calibrate'});$('#enable').onclick=async()=>{try{if(typeof DeviceOrientationEvent?.requestPermission==='function'&&await DeviceOrientationEvent.requestPermission()!=='granted')throw Error('Permission denied');window.addEventListener('deviceorientation',motion);$('#enable').textContent='MOTION ON';$('#enable').disabled=true}catch(e){$('#enable').textContent='MOTION FAILED'}};
+let stream,recorder,chunks=[],recording=false;function wireTalk(b){b.addEventListener('click',e=>e.preventDefault());b.addEventListener('pointerdown',async e=>{e.preventDefault();if(recording)return;try{stream=await navigator.mediaDevices.getUserMedia({audio:true});const preferred=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t));recorder=preferred?new MediaRecorder(stream,{mimeType:preferred}):new MediaRecorder(stream);chunks=[];recorder.ondataavailable=x=>x.data.size&&chunks.push(x.data);recorder.onstop=async()=>{const type=recorder.mimeType||chunks[0]?.type||'audio/webm',blob=new Blob(chunks,{type});stream?.getTracks().forEach(t=>t.stop());transcript.textContent='Transcribing…';try{const r=await fetch('/transcribe',{method:'POST',headers:{'Content-Type':type},body:blob}),d=await r.json();if(!r.ok)throw Error(d.error);transcript.textContent=d.text||'(No speech recognised)';if(d.text)send({type:'speech',text:d.text})}catch(err){transcript.textContent=err.message}finally{recording=false;b.textContent='🎤 HOLD TO TALK'}};recorder.start();recording=true;b.textContent='RELEASE TO SEND';transcript.textContent='Listening…'}catch(err){transcript.textContent=err.message}});const stop=e=>{e.preventDefault();if(recording&&recorder?.state==='recording')recorder.stop()};b.addEventListener('pointerup',stop);b.addEventListener('pointercancel',stop)}
+</script></body></html>
